@@ -72,23 +72,30 @@
 
 **输入：**
 - 品类关键词（仿真面包挂件、可爱钥匙扣、治愈系小物等）
-- 竞品账号列表
+- 竞品账号列表（初始列表由你提供，后续 Agent 自动发现新竞品）
 
 **输出：**
 - 每日热点报告（飞书文档）
 - 选品建议（哪些款式可能爆）
 - 热门话题标签推荐
+- 竞品账号发现报告（自动发现同品类新账号）
 
 **自动任务：**
 - 每日 9:00 输出"今日热点简报"
 - 每周一 10:00 输出"上周竞品分析周报"
 
+**数据获取方式：**
+- **小红书数据：** 通过网页爬虫抓取（小红书无官方开放 API），使用 Selenium/Playwright 模拟浏览器访问
+- **飞书文档存储：** 抓取的数据存储到飞书多维表格，便于后续分析
+- **注意事项：** 爬虫需遵守小红书 robots.txt，控制抓取频率（每分钟不超过 10 次）
+
 **Hermes 技能配置：**
 ```yaml
 skills:
-  - xhs-trend-scraper: 抓取小红书热门话题
-  - competitor-tracker: 追踪竞品账号动态
-  - trend-analyzer: 分析品类趋势
+  - xhs-trend-scraper: 抓取小红书热门话题（网页爬虫）
+  - competitor-tracker: 追踪竞品账号动态（定时抓取竞品主页）
+  - trend-analyzer: 分析品类趋势（LLM 分析抓取的数据）
+  - competitor-discoverer: 自动发现同品类新账号
 ```
 
 ---
@@ -288,13 +295,20 @@ skills:
 **核心职责：** 追踪帖子表现，输出优化建议
 
 **输入：**
-- 小红书帖子数据（阅读量、点赞、收藏、评论、转发）
+- 小红书帖子数据（通过网页爬虫抓取，和市场分析师共用爬虫基础设施）
 - 发布时间、内容类型、话题标签
+- 你的手动标注（哪些帖子带来了询盘/成交）
 
 **输出：**
 - 每日数据日报（飞书文档）
 - 优化建议（什么类型的内容表现好、最佳发布时间等）
 - 爆款复盘（分析高表现帖子的共同特征）
+- 询盘转化追踪（哪些内容带来了实际询问）
+
+**数据获取方式：**
+- **帖子数据：** 通过网页爬虫抓取自己账号的主页，获取每条帖子的阅读、点赞、收藏、评论数
+- **询盘数据：** 你手动记录（每天花 2 分钟在飞书表格里记录：今日收到几个询盘、来自哪条帖子）
+- **注意事项：** 只抓取自己账号的数据，不抓取他人数据，遵守平台规则
 
 **自动任务：**
 - 每日 22:00 输出"今日数据日报"
@@ -337,7 +351,7 @@ skills:
 
 ### 3.7 客服助理
 
-**核心职责：** 自动回复评论和私信
+**核心职责：** 监控评论和私信，生成回复话术供你确认
 
 **输入：**
 - 用户评论
@@ -345,12 +359,18 @@ skills:
 - 产品知识库（价格、尺寸、购买链接等）
 
 **输出：**
-- 回复话术（需你确认后发送）
-- 常见问题汇总
+- 回复话术建议（飞书消息，@你确认）
+- 常见问题汇总（每日更新）
+- 高意向客户标记（询问价格、购买方式的客户）
+
+**工作模式：半自动**
+- **自动：** 每 2 小时检查一次新评论/私信，生成回复建议，@你确认
+- **手动：** 你在飞书确认后，由你手动发送回复（小红书无官方 API，无法自动发送）
+- **未来升级：** 如果小红书开放 API 或使用浏览器自动化，可升级为全自动回复
 
 **自动任务：**
-- 每 2 小时检查一次新评论/私信
-- 生成回复建议，@你确认后再发送
+- 每 2 小时检查新评论/私信
+- 每日 21:00 输出"今日客服汇总"（常见问题、高意向客户列表）
 
 **回复话术模板：**
 ```
@@ -468,27 +488,35 @@ skills:
 
 ### 5.3 飞书 Bot API 集成
 
-**图片/视频上传：**
+**注意：** 以下代码为概念性示例，实际的 API 调用请参考[飞书开放平台文档](https://open.feishu.cn/document/)
+
 ```python
-# 生图/视频工程师通过飞书 Bot API 上传文件
+# 生图/视频工程师通过飞书 Bot API 上传文件（概念示例）
 import requests
 
 def upload_to_feishu(file_path, chat_id):
+    """
+    上传图片或视频到飞书群聊
+    注意：实际实现需要：
+    1. 获取 access_token（通过 app_id 和 app_secret）
+    2. 先上传文件获取 file_key
+    3. 再发送消息引用该 file_key
+    """
     url = "https://open.feishu.cn/open-apis/im/v1/messages"
     headers = {"Authorization": f"Bearer {access_token}"}
     
-    # 上传图片
+    # 上传图片（示例）
     if file_path.endswith(('.jpg', '.png')):
-        file_key = upload_image(file_path)
+        file_key = upload_image(file_path)  # 需要先实现文件上传接口
         body = {
             "receive_id": chat_id,
             "msg_type": "image",
             "content": f'{{"image_key": "{file_key}"}}'
         }
     
-    # 上传视频
+    # 上传视频（示例）
     elif file_path.endswith(('.mp4', '.mov')):
-        file_key = upload_video(file_path)
+        file_key = upload_video(file_path)  # 需要先实现文件上传接口
         body = {
             "receive_id": chat_id,
             "msg_type": "media",
@@ -497,6 +525,12 @@ def upload_to_feishu(file_path, chat_id):
     
     requests.post(url, headers=headers, json=body)
 ```
+
+**实际开发步骤：**
+1. 在[飞书开放平台](https://open.feishu.cn/)创建应用，获取 app_id 和 app_secret
+2. 申请权限：`im:message:send`（发送消息）、`im:file:upload`（上传文件）
+3. 参考[飞书 Bot 文档](https://open.feishu.cn/document/home/develop-a-bot-in-5-minutes)实现文件上传
+4. 测试图片/视频消息发送
 
 ---
 
@@ -517,15 +551,17 @@ dreamina --version
 
 ### 6.2 生图命令
 
+**注意：** 以下命令为示例格式，实际的 dreamina-cli 命令请参考官方文档（`dreamina --help`）
+
 ```bash
-# 基础生图
+# 基础生图（示例）
 dreamina generate \
   --prompt "cute simulated bread keychain, kawaii style" \
   --input supplier_img.jpg \
   --output output_img.jpg \
   --style cute
 
-# 高级参数
+# 高级参数（示例）
 dreamina generate \
   --prompt "..." \
   --input supplier_img.jpg \
@@ -537,10 +573,17 @@ dreamina generate \
   --negative-prompt "blurry, low quality"
 ```
 
+**实际使用前：**
+1. 运行 `dreamina --help` 查看支持的命令和参数
+2. 运行 `dreamina generate --help` 查看生图命令的具体参数
+3. 根据实际参数调整上述示例
+
 ### 6.3 生视频命令
 
+**注意：** 以下命令为示例格式，实际的 dreamina-cli 命令请参考官方文档（`dreamina --help`）
+
 ```bash
-# 试片（低成本）
+# 试片（低成本，示例）
 dreamina video \
   --prompt "simulated bread keychain rotating slowly" \
   --input product_img.jpg \
@@ -549,7 +592,7 @@ dreamina video \
   --resolution 720p \
   --model fast
 
-# 成片（高质量）
+# 成片（高质量，示例）
 dreamina video \
   --prompt "simulated bread keychain hanging on bag, lifestyle" \
   --input product_img.jpg \
@@ -559,6 +602,11 @@ dreamina video \
   --model vip \
   --camera-motion "smooth pan"
 ```
+
+**实际使用前：**
+1. 运行 `dreamina video --help` 查看视频命令的具体参数
+2. 确认支持的分辨率、时长、模型等选项
+3. 根据实际参数调整上述示例
 
 ---
 
@@ -630,23 +678,30 @@ dreamina video \
 
 ### 8.2 首批进货成本
 
+**原始方案（超出预算）：**
 - 选择 10-15 个 SKU 试水
 - 每个 SKU 进货 300 件（最低起订量）
 - 平均单价 5 元
-- **总计：10 × 300 × 5 = 15,000 元**
+- **总计：10 × 300 × 5 = 15,000 元** ❌ 超出 5000 预算
 
-**注意：** 这超出 5000 预算。建议：
-1. 先和供应商协商小批量试货（100 件/SKU）
-2. 或选择 5 个 SKU，每个 300 件（7,500 元）
-3. 或选择 3 个 SKU，每个 300 件（4,500 元）✅ 推荐
+**推荐方案（符合预算）：**
+- 选择 **3 个 SKU** 试水（建议：小汉堡、冰淇淋、牛角包——最受欢迎的 3 类）
+- 每个 SKU 进货 300 件（最低起订量）
+- 平均单价 5 元
+- **总计：3 × 300 × 5 = 4,500 元** ✅
 
-### 8.3 总预算分配
+**供应商协商建议：**
+1. 尝试协商小批量试货（100 件/SKU），可降低到 1,500 元
+2. 或与供应商说明是电商测试，争取首单优惠
+3. 如协商成功，可多选 2-3 个 SKU
 
-| 项目 | 预算 |
-|------|------|
-| 首批进货（3 SKU × 300 件） | 4,500 元 |
-| AI 工具（第 1 个月） | 500 元 |
-| **总计** | **5,000 元** |
+### 8.3 总预算分配（推荐方案）
+
+| 项目 | 预算 | 说明 |
+|------|------|------|
+| 首批进货（3 SKU × 300 件） | 4,500 元 | 小汉堡、冰淇淋、牛角包 |
+| AI 工具（第 1 个月） | 500 元 | LLM API + 即梦积分 |
+| **总计** | **5,000 元** | |
 
 ---
 
